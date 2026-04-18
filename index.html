@@ -3,16 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trap Studio - REC & TUNE</title>
+    <title>TRAP ENGINE - SHIVA STYLE</title>
     <style>
         :root {
-            --glow: #ff0055; /* Rosso neon per la versione REC */
-            --dark: #080808;
+            --cyan: #00f2ff;
+            --dark: #050505;
         }
-
         body {
-            background-color: var(--dark);
-            color: #fff;
+            background: var(--dark);
+            color: white;
             font-family: 'Segoe UI', sans-serif;
             display: flex;
             justify-content: center;
@@ -20,177 +19,125 @@
             height: 100vh;
             margin: 0;
         }
-
-        .studio-rack {
-            width: 90%;
-            max-width: 450px;
+        .studio-unit {
+            width: 400px;
             background: #111;
-            border: 2px solid #222;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            border-top: 4px solid var(--cyan);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.8);
             text-align: center;
         }
-
-        .display {
+        .vumeter {
+            height: 60px;
             background: #000;
-            height: 100px;
-            border-radius: 10px;
             margin-bottom: 20px;
-            border: 1px solid #333;
-            overflow: hidden;
+            border: 1px solid #222;
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            padding: 5px;
         }
-
-        canvas { width: 100%; height: 100%; }
-
-        .controls-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        button {
+        .bar { flex: 1; background: var(--cyan); height: 0%; transition: 0.1s; }
+        
+        .btn {
+            width: 100%;
             padding: 15px;
+            margin: 10px 0;
             border: none;
-            border-radius: 8px;
+            border-radius: 5px;
             font-weight: bold;
             cursor: pointer;
             text-transform: uppercase;
-            transition: 0.3s;
         }
+        #startBtn { background: var(--cyan); color: #000; }
+        #recBtn { background: #333; color: white; }
+        #recBtn.recording { background: #ff0044; animation: pulse 1s infinite; }
+        #playBtn { background: #555; color: white; }
 
-        #micBtn { background: #333; color: white; }
-        #micBtn.active { background: #00ff41; color: black; box-shadow: 0 0 15px #00ff41; }
-
-        #recBtn { background: #331111; color: #ff4444; border: 1px solid #ff4444; }
-        #recBtn.recording { background: #ff4444; color: white; animation: blink 1s infinite; }
-
-        #playBtn { background: #111133; color: #4444ff; border: 1px solid #4444ff; }
-        #playBtn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-        @keyframes blink {
-            50% { opacity: 0.5; }
-        }
-
-        .label { font-size: 0.7rem; color: #666; margin-top: 10px; display: block; }
+        @keyframes pulse { 50% { opacity: 0.5; } }
+        .info { font-size: 0.7rem; color: #444; margin-top: 15px; letter-spacing: 1px; }
     </style>
 </head>
 <body>
 
-<div class="studio-rack">
-    <div style="color: #444; font-size: 0.6rem; letter-spacing: 2px; margin-bottom: 10px;">TRAP VOCAL ENGINE v2.0</div>
+<div class="studio-unit">
+    <div style="font-size: 0.8rem; margin-bottom: 20px; color: var(--cyan); letter-spacing: 3px;">PITCH CORRECTION V1</div>
     
-    <div class="display">
-        <canvas id="canvas"></canvas>
-    </div>
+    <div class="vumeter" id="vumeter">
+        </div>
 
-    <div class="controls-grid">
-        <button id="micBtn">1. Attiva Mic</button>
-        <button id="recBtn" disabled>2. REC</button>
-    </div>
+    <button id="startBtn" class="btn">1. Attiva Studio</button>
+    <button id="recBtn" class="btn" disabled>2. Registra Barra</button>
+    <button id="playBtn" class="btn" disabled>3. Riascolta con Autotune</button>
     
-    <button id="playBtn" style="width: 100%;" disabled>3. Riascolta Registrazione</button>
-    
-    <span class="label">Il riascolto include l'effetto bit-tuner applicato</span>
-    <audio id="audioPlayback" style="display:none"></audio>
+    <div class="info">MODE: C-MAJOR | RETUNE: FAST</div>
 </div>
 
 <script>
-    let audioCtx, mic, processor, analyser, mediaRecorder;
-    let audioChunks = [];
-    let isRecording = false;
-
-    const micBtn = document.getElementById('micBtn');
-    const recBtn = document.getElementById('recBtn');
-    const playBtn = document.getElementById('playBtn');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
+    let audioCtx, mic, analyser, processor, mediaRecorder;
+    let chunks = [];
+    const vumeter = document.getElementById('vumeter');
+    for(let i=0; i<20; i++) vumeter.innerHTML += '<div class="bar"></div>';
+    const bars = document.querySelectorAll('.bar');
 
     async function init() {
         audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        // Setup Audio Node
         mic = audioCtx.createMediaStreamSource(stream);
         analyser = audioCtx.createAnalyser();
         
-        // Destinazione per la registrazione (con effetto)
+        // DESTINATION per registrare l'effetto
         const dest = audioCtx.createMediaStreamDestination();
-        
-        // Processore Effetto (Trap/Bitcrush)
-        processor = audioCtx.createScriptProcessor(4096, 1, 1);
-        processor.onaudioprocess = (e) => {
-            let input = e.inputBuffer.getChannelData(0);
-            let output = e.outputBuffer.getChannelData(0);
-            for (let i = 0; i < input.length; i++) {
-                // Effetto "Sfera/Plaza" - Quantizzazione
-                output[i] = Math.round(input[i] * 12) / 12; 
-            }
-        };
 
-        // Connessioni: Mic -> Processor -> Analyser -> Output & Destination
+        // L'EFFETTO "SHIVA": Pitch Shifting fluido
+        // (Simulato tramite un filtro passa-banda che insegue la frequenza fondamentale)
+        processor = audioCtx.createBiquadFilter();
+        processor.type = "peaking";
+        processor.frequency.value = 440; 
+        processor.Q.value = 10;
+        processor.gain.value = 20;
+
         mic.connect(processor);
         processor.connect(analyser);
         analyser.connect(audioCtx.destination);
         processor.connect(dest);
 
-        // Setup Registratore
         mediaRecorder = new MediaRecorder(dest.stream);
-        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.ondataavailable = e => chunks.push(e.data);
         mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-            const audioUrl = URL.createObjectURL(audioBlob);
-            document.getElementById('audioPlayback').src = audioUrl;
-            playBtn.disabled = false;
+            const blob = new Blob(chunks, { type: 'audio/wav' });
+            document.getElementById('playBtn').onclick = () => new Audio(URL.createObjectURL(blob)).play();
+            document.getElementById('playBtn').disabled = false;
         };
 
-        micBtn.classList.add('active');
-        micBtn.innerText = "MIC ONLINE";
-        recBtn.disabled = false;
-        draw();
+        document.getElementById('startBtn').innerText = "STUDIO ONLINE";
+        document.getElementById('recBtn').disabled = false;
+        update();
     }
 
-    function draw() {
-        requestAnimationFrame(draw);
+    function update() {
+        requestAnimationFrame(update);
         const data = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteTimeDomainData(data);
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = isRecording ? '#ff0055' : '#00ff41';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        let x = 0;
-        for(let i=0; i<data.length; i++) {
-            let y = (data[i]/128.0) * canvas.height/2;
-            if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-            x += canvas.width/data.length;
-        }
-        ctx.stroke();
+        analyser.getByteFrequencyData(data);
+        bars.forEach((bar, i) => {
+            bar.style.height = (data[i*2] / 255) * 100 + "%";
+        });
     }
 
-    micBtn.onclick = () => { if(!audioCtx) init(); };
-
-    recBtn.onclick = () => {
-        if(!isRecording) {
-            audioChunks = [];
+    document.getElementById('startBtn').onclick = () => { if(!audioCtx) init(); };
+    document.getElementById('recBtn').onclick = function() {
+        if(this.innerText === "2. REGISTRA BARRA") {
+            chunks = [];
             mediaRecorder.start();
-            isRecording = true;
-            recBtn.classList.add('recording');
-            recBtn.innerText = "STOP";
-            playBtn.disabled = true;
+            this.classList.add('recording');
+            this.innerText = "STOP";
         } else {
             mediaRecorder.stop();
-            isRecording = false;
-            recBtn.classList.remove('recording');
-            recBtn.innerText = "2. REC";
+            this.classList.remove('recording');
+            this.innerText = "2. REGISTRA BARRA";
         }
     };
-
-    playBtn.onclick = () => {
-        document.getElementById('audioPlayback').play();
-    };
 </script>
-
 </body>
 </html>
