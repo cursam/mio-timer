@@ -3,167 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TRAP-TUNER Elite</title>
+    <title>Trap Studio - REC & TUNE</title>
     <style>
         :root {
-            --glow: #00ff41;
-            --dark: #0a0a0a;
-            --panel: #151515;
+            --glow: #ff0055; /* Rosso neon per la versione REC */
+            --dark: #080808;
         }
 
         body {
             background-color: var(--dark);
             color: #fff;
-            font-family: 'Orbitron', sans-serif; /* Un font futuristico sarebbe top */
+            font-family: 'Segoe UI', sans-serif;
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             margin: 0;
-            text-transform: uppercase;
         }
 
-        .rack-case {
+        .studio-rack {
             width: 90%;
-            max-width: 500px;
-            background: var(--panel);
-            border: 3px solid #333;
-            border-radius: 5px;
-            padding: 20px;
-            box-shadow: 0 0 30px rgba(0,0,0,1), inset 0 0 10px rgba(255,255,255,0.05);
+            max-width: 450px;
+            background: #111;
+            border: 2px solid #222;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            text-align: center;
         }
 
-        .display-screen {
-            background: #001100;
-            border: 2px solid #222;
-            height: 120px;
+        .display {
+            background: #000;
+            height: 100px;
+            border-radius: 10px;
             margin-bottom: 20px;
-            position: relative;
+            border: 1px solid #333;
             overflow: hidden;
         }
 
         canvas { width: 100%; height: 100%; }
 
-        .brand {
-            font-size: 0.7rem;
-            color: var(--glow);
-            text-align: right;
-            letter-spacing: 3px;
-        }
-
-        .knobs {
+        .controls-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            padding: 20px 0;
+            gap: 15px;
+            margin-bottom: 20px;
         }
 
-        .parameter {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            font-size: 0.6rem;
-            color: #888;
-        }
-
-        input[type=range] {
-            width: 100%;
-            accent-color: var(--glow);
-        }
-
-        .btn-power {
-            background: #222;
-            border: 1px solid var(--glow);
-            color: var(--glow);
+        button {
             padding: 15px;
-            width: 100%;
-            cursor: pointer;
+            border: none;
+            border-radius: 8px;
             font-weight: bold;
-            transition: 0.2s;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: 0.3s;
         }
 
-        .btn-power:hover {
-            background: var(--glow);
-            color: #000;
-            box-shadow: 0 0 15px var(--glow);
+        #micBtn { background: #333; color: white; }
+        #micBtn.active { background: #00ff41; color: black; box-shadow: 0 0 15px #00ff41; }
+
+        #recBtn { background: #331111; color: #ff4444; border: 1px solid #ff4444; }
+        #recBtn.recording { background: #ff4444; color: white; animation: blink 1s infinite; }
+
+        #playBtn { background: #111133; color: #4444ff; border: 1px solid #4444ff; }
+        #playBtn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        @keyframes blink {
+            50% { opacity: 0.5; }
         }
 
-        .active-led {
-            width: 8px;
-            height: 8px;
-            background: #f00;
-            border-radius: 50%;
-            margin: 10px auto;
-            box-shadow: 0 0 5px #f00;
-        }
+        .label { font-size: 0.7rem; color: #666; margin-top: 10px; display: block; }
     </style>
 </head>
 <body>
 
-<div class="rack-case">
-    <div class="brand">PRO SERIES // TRAP TUNER</div>
+<div class="studio-rack">
+    <div style="color: #444; font-size: 0.6rem; letter-spacing: 2px; margin-bottom: 10px;">TRAP VOCAL ENGINE v2.0</div>
     
-    <div class="display-screen">
-        <canvas id="scope"></canvas>
+    <div class="display">
+        <canvas id="canvas"></canvas>
     </div>
 
-    <div class="knobs">
-        <div class="parameter">
-            <label>RETUNE SPEED (AUTO)</label>
-            <input type="range" min="0" max="100" value="100">
-            <span>HARD TUNE: MAX</span>
-        </div>
-        <div class="parameter">
-            <label>ROBOTIC MIX</label>
-            <input type="range" id="wet" min="0" max="100" value="80">
-        </div>
+    <div class="controls-grid">
+        <button id="micBtn">1. Attiva Mic</button>
+        <button id="recBtn" disabled>2. REC</button>
     </div>
-
-    <button id="onOff" class="btn-power">ENGAGE AUTOTUNE</button>
-    <div id="led" class="active-led" style="background: #300; box-shadow: none;"></div>
+    
+    <button id="playBtn" style="width: 100%;" disabled>3. Riascolta Registrazione</button>
+    
+    <span class="label">Il riascolto include l'effetto bit-tuner applicato</span>
+    <audio id="audioPlayback" style="display:none"></audio>
 </div>
 
 <script>
-    let ctx, mic, processor, analyser;
-    const btn = document.getElementById('onOff');
-    const canvas = document.getElementById('scope');
-    const cc = canvas.getContext('2d');
+    let audioCtx, mic, processor, analyser, mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
 
-    async function start() {
-        ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const micBtn = document.getElementById('micBtn');
+    const recBtn = document.getElementById('recBtn');
+    const playBtn = document.getElementById('playBtn');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    async function init() {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mic = ctx.createMediaStreamSource(stream);
         
-        analyser = ctx.createAnalyser();
-        analyser.fftSize = 2048;
+        // Setup Audio Node
+        mic = audioCtx.createMediaStreamSource(stream);
+        analyser = audioCtx.createAnalyser();
         
-        // Effetto "Metal" tramite Bitcrusher (simula la texture dei rapper)
-        const bufferSize = 4096;
-        processor = ctx.createScriptProcessor(bufferSize, 1, 1);
+        // Destinazione per la registrazione (con effetto)
+        const dest = audioCtx.createMediaStreamDestination();
         
-        processor.onaudioprocess = function(e) {
-            const input = e.inputBuffer.getChannelData(0);
-            const output = e.outputBuffer.getChannelData(0);
-            const wet = document.getElementById('wet').value / 100;
-
-            for (let i = 0; i < bufferSize; i++) {
-                // Semplice algoritmo di quantizzazione dell'ampiezza per suonare "trap"
-                // Crea quel suono un po' sporco e digitale
-                let val = input[i];
-                if(wet > 0.5) {
-                    val = Math.round(val * 16) / 16; 
-                }
-                output[i] = val;
+        // Processore Effetto (Trap/Bitcrush)
+        processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        processor.onaudioprocess = (e) => {
+            let input = e.inputBuffer.getChannelData(0);
+            let output = e.outputBuffer.getChannelData(0);
+            for (let i = 0; i < input.length; i++) {
+                // Effetto "Sfera/Plaza" - Quantizzazione
+                output[i] = Math.round(input[i] * 12) / 12; 
             }
         };
 
+        // Connessioni: Mic -> Processor -> Analyser -> Output & Destination
         mic.connect(processor);
         processor.connect(analyser);
-        analyser.connect(ctx.destination);
+        analyser.connect(audioCtx.destination);
+        processor.connect(dest);
 
-        document.getElementById('led').style.background = '#00ff41';
-        document.getElementById('led').style.boxShadow = '0 0 10px #00ff41';
-        btn.innerText = "SISTEMA ATTIVO";
+        // Setup Registratore
+        mediaRecorder = new MediaRecorder(dest.stream);
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            document.getElementById('audioPlayback').src = audioUrl;
+            playBtn.disabled = false;
+        };
+
+        micBtn.classList.add('active');
+        micBtn.innerText = "MIC ONLINE";
+        recBtn.disabled = false;
         draw();
     }
 
@@ -171,23 +155,41 @@
         requestAnimationFrame(draw);
         const data = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteTimeDomainData(data);
-        cc.fillStyle = '#001100';
-        cc.fillRect(0, 0, canvas.width, canvas.height);
-        cc.lineWidth = 2;
-        cc.strokeStyle = '#00ff41';
-        cc.beginPath();
-        let sliceWidth = canvas.width * 1.0 / analyser.frequencyBinCount;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = isRecording ? '#ff0055' : '#00ff41';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
         let x = 0;
-        for(let i = 0; i < analyser.frequencyBinCount; i++) {
-            let v = data[i] / 128.0;
-            let y = v * canvas.height / 2;
-            if(i === 0) cc.moveTo(x, y); else cc.lineTo(x, y);
-            x += sliceWidth;
+        for(let i=0; i<data.length; i++) {
+            let y = (data[i]/128.0) * canvas.height/2;
+            if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+            x += canvas.width/data.length;
         }
-        cc.stroke();
+        ctx.stroke();
     }
 
-    btn.onclick = () => { if(!ctx) start(); };
+    micBtn.onclick = () => { if(!audioCtx) init(); };
+
+    recBtn.onclick = () => {
+        if(!isRecording) {
+            audioChunks = [];
+            mediaRecorder.start();
+            isRecording = true;
+            recBtn.classList.add('recording');
+            recBtn.innerText = "STOP";
+            playBtn.disabled = true;
+        } else {
+            mediaRecorder.stop();
+            isRecording = false;
+            recBtn.classList.remove('recording');
+            recBtn.innerText = "2. REC";
+        }
+    };
+
+    playBtn.onclick = () => {
+        document.getElementById('audioPlayback').play();
+    };
 </script>
 
 </body>
