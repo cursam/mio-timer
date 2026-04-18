@@ -3,189 +3,192 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Focus Flow - Minimal Timer</title>
+    <title>TRAP-TUNER Elite</title>
     <style>
         :root {
-            --bg-color: #0a0a0c;
-            --accent-color: #00f2ff;
-            --text-color: #ffffff;
-            --pause-color: #ff2d55;
+            --glow: #00ff41;
+            --dark: #0a0a0a;
+            --panel: #151515;
         }
 
         body {
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--dark);
+            color: #fff;
+            font-family: 'Orbitron', sans-serif; /* Un font futuristico sarebbe top */
             display: flex;
             justify-content: center;
             align-items: center;
             height: 100vh;
             margin: 0;
+            text-transform: uppercase;
+        }
+
+        .rack-case {
+            width: 90%;
+            max-width: 500px;
+            background: var(--panel);
+            border: 3px solid #333;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 0 30px rgba(0,0,0,1), inset 0 0 10px rgba(255,255,255,0.05);
+        }
+
+        .display-screen {
+            background: #001100;
+            border: 2px solid #222;
+            height: 120px;
+            margin-bottom: 20px;
+            position: relative;
             overflow: hidden;
         }
 
-        .container {
-            text-align: center;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
+        canvas { width: 100%; height: 100%; }
 
-        /* Cerchio SVG Animato */
-        .timer-svg {
-            transform: rotate(-90deg);
-            filter: drop-shadow(0 0 10px rgba(0, 242, 255, 0.2));
-        }
-
-        .timer-bg {
-            fill: none;
-            stroke: #1a1a1e;
-            stroke-width: 4;
-        }
-
-        .timer-progress {
-            fill: none;
-            stroke: var(--accent-color);
-            stroke-width: 4;
-            stroke-linecap: round;
-            stroke-dasharray: 880; /* Circonferenza approssimativa */
-            stroke-dashoffset: 0;
-            transition: stroke-dashoffset 1s linear, stroke 0.4s ease;
-        }
-
-        /* Visualizzazione Tempo */
-        .time-display {
-            position: absolute;
-            top: 45%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 4rem;
-            font-weight: 200;
-            letter-spacing: -2px;
-            cursor: pointer;
-            user-select: none;
-            transition: all 0.3s ease;
-        }
-
-        .controls {
-            position: absolute;
-            bottom: -60px;
-            opacity: 0.4;
-            transition: opacity 0.3s;
+        .brand {
             font-size: 0.7rem;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            line-height: 1.6;
+            color: var(--glow);
+            text-align: right;
+            letter-spacing: 3px;
         }
 
-        .container:hover .controls {
-            opacity: 1;
+        .knobs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px 0;
         }
 
-        /* Stato in Pausa */
-        .paused .timer-progress {
-            stroke: #333;
+        .parameter {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-size: 0.6rem;
+            color: #888;
         }
 
-        .paused .time-display {
-            color: #555;
-            text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        input[type=range] {
+            width: 100%;
+            accent-color: var(--glow);
         }
 
-        /* Animazione finale quando scade il tempo */
-        @keyframes alarm {
-            0% { background-color: var(--bg-color); }
-            50% { background-color: var(--pause-color); }
-            100% { background-color: var(--bg-color); }
+        .btn-power {
+            background: #222;
+            border: 1px solid var(--glow);
+            color: var(--glow);
+            padding: 15px;
+            width: 100%;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
         }
 
-        .finished {
-            animation: alarm 0.5s 5;
+        .btn-power:hover {
+            background: var(--glow);
+            color: #000;
+            box-shadow: 0 0 15px var(--glow);
+        }
+
+        .active-led {
+            width: 8px;
+            height: 8px;
+            background: #f00;
+            border-radius: 50%;
+            margin: 10px auto;
+            box-shadow: 0 0 5px #f00;
         }
     </style>
 </head>
-<body id="body">
+<body>
 
-    <div class="container" id="timerContainer">
-        <svg class="timer-svg" width="320" height="320">
-            <circle class="timer-bg" cx="160" cy="160" r="140"></circle>
-            <circle id="progress" class="timer-progress" cx="160" cy="160" r="140"></circle>
-        </svg>
-        
-        <div class="time-display" id="display">25:00</div>
-        
-        <div class="controls">
-            CLICK PER START/STOP<br>
-            DOPPIO CLICK PER RESET
+<div class="rack-case">
+    <div class="brand">PRO SERIES // TRAP TUNER</div>
+    
+    <div class="display-screen">
+        <canvas id="scope"></canvas>
+    </div>
+
+    <div class="knobs">
+        <div class="parameter">
+            <label>RETUNE SPEED (AUTO)</label>
+            <input type="range" min="0" max="100" value="100">
+            <span>HARD TUNE: MAX</span>
+        </div>
+        <div class="parameter">
+            <label>ROBOTIC MIX</label>
+            <input type="range" id="wet" min="0" max="100" value="80">
         </div>
     </div>
 
-    <script>
-        let timeLeft = 25 * 60;
-        let totalTime = 25 * 60;
-        let timerId = null;
+    <button id="onOff" class="btn-power">ENGAGE AUTOTUNE</button>
+    <div id="led" class="active-led" style="background: #300; box-shadow: none;"></div>
+</div>
+
+<script>
+    let ctx, mic, processor, analyser;
+    const btn = document.getElementById('onOff');
+    const canvas = document.getElementById('scope');
+    const cc = canvas.getContext('2d');
+
+    async function start() {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mic = ctx.createMediaStreamSource(stream);
         
-        const display = document.getElementById('display');
-        const progress = document.getElementById('progress');
-        const container = document.getElementById('timerContainer');
-        const body = document.getElementById('body');
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 2048;
+        
+        // Effetto "Metal" tramite Bitcrusher (simula la texture dei rapper)
+        const bufferSize = 4096;
+        processor = ctx.createScriptProcessor(bufferSize, 1, 1);
+        
+        processor.onaudioprocess = function(e) {
+            const input = e.inputBuffer.getChannelData(0);
+            const output = e.outputBuffer.getChannelData(0);
+            const wet = document.getElementById('wet').value / 100;
 
-        // Calcolo della circonferenza (2 * PI * R) -> 2 * 3.14 * 140 = ~880
-        const circumference = 2 * Math.PI * 140;
-        progress.style.strokeDasharray = circumference;
-
-        function updateDisplay() {
-            const minutes = Math.floor(timeLeft / 60);
-            const seconds = timeLeft % 60;
-            display.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            
-            // Aggiorna il cerchio
-            const offset = circumference - (timeLeft / totalTime) * circumference;
-            progress.style.strokeDashoffset = offset;
-        }
-
-        function toggleTimer() {
-            if (timerId) {
-                // Metti in pausa
-                clearInterval(timerId);
-                timerId = null;
-                container.classList.add('paused');
-            } else {
-                // Avvia
-                container.classList.remove('paused');
-                container.classList.remove('finished');
-                timerId = setInterval(() => {
-                    timeLeft--;
-                    updateDisplay();
-                    
-                    if (timeLeft <= 0) {
-                        clearInterval(timerId);
-                        timerId = null;
-                        container.classList.add('finished');
-                        alert("Sessione completata! Ottimo lavoro.");
-                        resetTimer();
-                    }
-                }, 1000);
+            for (let i = 0; i < bufferSize; i++) {
+                // Semplice algoritmo di quantizzazione dell'ampiezza per suonare "trap"
+                // Crea quel suono un po' sporco e digitale
+                let val = input[i];
+                if(wet > 0.5) {
+                    val = Math.round(val * 16) / 16; 
+                }
+                output[i] = val;
             }
+        };
+
+        mic.connect(processor);
+        processor.connect(analyser);
+        analyser.connect(ctx.destination);
+
+        document.getElementById('led').style.background = '#00ff41';
+        document.getElementById('led').style.boxShadow = '0 0 10px #00ff41';
+        btn.innerText = "SISTEMA ATTIVO";
+        draw();
+    }
+
+    function draw() {
+        requestAnimationFrame(draw);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteTimeDomainData(data);
+        cc.fillStyle = '#001100';
+        cc.fillRect(0, 0, canvas.width, canvas.height);
+        cc.lineWidth = 2;
+        cc.strokeStyle = '#00ff41';
+        cc.beginPath();
+        let sliceWidth = canvas.width * 1.0 / analyser.frequencyBinCount;
+        let x = 0;
+        for(let i = 0; i < analyser.frequencyBinCount; i++) {
+            let v = data[i] / 128.0;
+            let y = v * canvas.height / 2;
+            if(i === 0) cc.moveTo(x, y); else cc.lineTo(x, y);
+            x += sliceWidth;
         }
+        cc.stroke();
+    }
 
-        function resetTimer() {
-            clearInterval(timerId);
-            timerId = null;
-            timeLeft = totalTime;
-            updateDisplay();
-            container.classList.remove('paused');
-            container.classList.remove('finished');
-        }
+    btn.onclick = () => { if(!ctx) start(); };
+</script>
 
-        // Eventi
-        display.addEventListener('click', toggleTimer);
-        display.addEventListener('dblclick', resetTimer);
-
-        // Inizializzazione
-        updateDisplay();
-    </script>
 </body>
 </html>
