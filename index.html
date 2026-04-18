@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Focus Flow - Minimal Timer</title>
+    <style>
+        :root {
+            --bg-color: #0a0a0c;
+            --accent-color: #00f2ff;
+            --text-color: #ffffff;
+            --pause-color: #ff2d55;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .container {
+            text-align: center;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        /* Cerchio SVG Animato */
+        .timer-svg {
+            transform: rotate(-90deg);
+            filter: drop-shadow(0 0 10px rgba(0, 242, 255, 0.2));
+        }
+
+        .timer-bg {
+            fill: none;
+            stroke: #1a1a1e;
+            stroke-width: 4;
+        }
+
+        .timer-progress {
+            fill: none;
+            stroke: var(--accent-color);
+            stroke-width: 4;
+            stroke-linecap: round;
+            stroke-dasharray: 880; /* Circonferenza approssimativa */
+            stroke-dashoffset: 0;
+            transition: stroke-dashoffset 1s linear, stroke 0.4s ease;
+        }
+
+        /* Visualizzazione Tempo */
+        .time-display {
+            position: absolute;
+            top: 45%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4rem;
+            font-weight: 200;
+            letter-spacing: -2px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.3s ease;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: -60px;
+            opacity: 0.4;
+            transition: opacity 0.3s;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            line-height: 1.6;
+        }
+
+        .container:hover .controls {
+            opacity: 1;
+        }
+
+        /* Stato in Pausa */
+        .paused .timer-progress {
+            stroke: #333;
+        }
+
+        .paused .time-display {
+            color: #555;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        }
+
+        /* Animazione finale quando scade il tempo */
+        @keyframes alarm {
+            0% { background-color: var(--bg-color); }
+            50% { background-color: var(--pause-color); }
+            100% { background-color: var(--bg-color); }
+        }
+
+        .finished {
+            animation: alarm 0.5s 5;
+        }
+    </style>
+</head>
+<body id="body">
+
+    <div class="container" id="timerContainer">
+        <svg class="timer-svg" width="320" height="320">
+            <circle class="timer-bg" cx="160" cy="160" r="140"></circle>
+            <circle id="progress" class="timer-progress" cx="160" cy="160" r="140"></circle>
+        </svg>
+        
+        <div class="time-display" id="display">25:00</div>
+        
+        <div class="controls">
+            CLICK PER START/STOP<br>
+            DOPPIO CLICK PER RESET
+        </div>
+    </div>
+
+    <script>
+        let timeLeft = 25 * 60;
+        let totalTime = 25 * 60;
+        let timerId = null;
+        
+        const display = document.getElementById('display');
+        const progress = document.getElementById('progress');
+        const container = document.getElementById('timerContainer');
+        const body = document.getElementById('body');
+
+        // Calcolo della circonferenza (2 * PI * R) -> 2 * 3.14 * 140 = ~880
+        const circumference = 2 * Math.PI * 140;
+        progress.style.strokeDasharray = circumference;
+
+        function updateDisplay() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            display.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            // Aggiorna il cerchio
+            const offset = circumference - (timeLeft / totalTime) * circumference;
+            progress.style.strokeDashoffset = offset;
+        }
+
+        function toggleTimer() {
+            if (timerId) {
+                // Metti in pausa
+                clearInterval(timerId);
+                timerId = null;
+                container.classList.add('paused');
+            } else {
+                // Avvia
+                container.classList.remove('paused');
+                container.classList.remove('finished');
+                timerId = setInterval(() => {
+                    timeLeft--;
+                    updateDisplay();
+                    
+                    if (timeLeft <= 0) {
+                        clearInterval(timerId);
+                        timerId = null;
+                        container.classList.add('finished');
+                        alert("Sessione completata! Ottimo lavoro.");
+                        resetTimer();
+                    }
+                }, 1000);
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timerId);
+            timerId = null;
+            timeLeft = totalTime;
+            updateDisplay();
+            container.classList.remove('paused');
+            container.classList.remove('finished');
+        }
+
+        // Eventi
+        display.addEventListener('click', toggleTimer);
+        display.addEventListener('dblclick', resetTimer);
+
+        // Inizializzazione
+        updateDisplay();
+    </script>
+</body>
+</html>
